@@ -2,11 +2,13 @@ import com.pat.Memory;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.io.IOException;
+
 public class MemoryTests {
 
 
     @Test
-    public void testLoadingRom_testCopyToGeneralMemory() {
+    public void testLoadingRom_testCopyToGeneralMemory() throws IOException {
         Memory memory = new Memory();
         memory.loadTestRom();
         Assert.assertEquals(memory.cartMemory[0x0000], memory.generalMemory[0x0000]);
@@ -20,5 +22,4 @@ public class MemoryTests {
         Assert.assertEquals(0x00, memory.generalMemory[0xFF05]);
         Assert.assertEquals(0xBF, memory.generalMemory[0xFF11]);
     }
-
 }

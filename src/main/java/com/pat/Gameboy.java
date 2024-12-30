@@ -5,6 +5,7 @@ import org.lwjgl.glfw.GLFWVidMode;
 import org.lwjgl.opengl.GL;
 import org.lwjgl.system.MemoryStack;
 
+import java.io.IOException;
 import java.nio.IntBuffer;
 import java.util.Date;
 
@@ -17,7 +18,7 @@ import static org.lwjgl.system.MemoryUtil.NULL;
 
 public class Gameboy {
     private final Memory memory = new Memory(); // Includes cartridge
-    private final CPU cpu = new CPU();
+    private final CPU cpu = new CPU(memory);
     private final Controller controller = new Controller();
     private long window;
     private static final int SCREEN_WIDTH = 160;
@@ -31,7 +32,7 @@ public class Gameboy {
     private int scrollX, scrollY;
     private int wndPosX, wndPosY;
 
-    public Gameboy() {
+    public Gameboy() throws IOException {
         // do something to setup things...
         memory.loadTestRom();
     }
