@@ -47,7 +47,9 @@ public class CPU {
         RIGHT, LEFT
     }
 
+    // 8bit rotate
     private int rotate(RotateDirection direction, Register register, Register.RegByte regByte, boolean includeCarry) {
+
         if (regByte == Register.RegByte.WORD) {
             System.out.println("Operation not supported rotateRight WORD");
         }
@@ -59,7 +61,7 @@ public class CPU {
 
         if (includeCarry) {
             boolean carry = flags.isSet(Flags.Flag.CARRY);
-            result = Helpful.setBit(result, direction == RotateDirection.RIGHT  ? 7 : 0, carry);
+            result = Helpful.setBit(result, direction == RotateDirection.RIGHT ? 7 : 0, carry);
         }
 
         flags.set(Flags.Flag.CARRY, oldBit);
@@ -73,7 +75,95 @@ public class CPU {
             register.setLo(result);
         }
 
-        return 4;
+        // CB07 is also 0x07. 0x07 is 4 cycles, but CB07 is 8 for some reason.
+        // So in the switch CB07 add 4 cycles just to fix the timing.
+        if (register == registerAF && regByte == Register.RegByte.HI) {
+            return 4;
+        }
+
+        return 8;
+    }
+
+    private int shift(RotateDirection direction, Register register, Register.RegByte regByte, boolean overrideLSBorMSB) {
+        if (regByte == Register.RegByte.WORD) {
+            System.out.println("Operation not supported rotateRight WORD");
+            return 16;
+        }
+
+        int reg = regByte == Register.RegByte.HI ? register.getHi() : register.getLo();
+        boolean oldBit = Helpful.getBit(reg, direction == RotateDirection.RIGHT ? 0 : 7);
+
+        int result = direction == RotateDirection.RIGHT ? reg >> 1 : reg << 1;
+
+        if (direction == RotateDirection.RIGHT && overrideLSBorMSB) {
+            result = Helpful.setBit(result, 0, false);
+        }
+
+        flags.set(Flags.Flag.CARRY, oldBit);
+        flags.set(Flags.Flag.ZERO, result == 0);
+        flags.set(Flags.Flag.HALF_CARRY, false);
+        flags.set(Flags.Flag.SUBTRACT, false);
+
+        if (regByte == Register.RegByte.HI) {
+            register.setHi(result);
+        } else {
+            register.setLo(result);
+        }
+
+        return 8;
+
+    }
+
+    /**
+     * Bit Opcodes
+     */
+
+    public int testRegisterBit(Register register, Register.RegByte regByte, int bitPosition) {
+        if (regByte == Register.RegByte.WORD) {
+            System.out.println("Operation not supported rotateRight WORD");
+            return 16;
+        }
+
+        boolean bitFlipped = Helpful.getBit(regByte == Register.RegByte.HI ? register.getHi() : register.getLo(), bitPosition);
+        flags.set(Flags.Flag.ZERO, bitFlipped);
+        flags.set(Flags.Flag.SUBTRACT, false);
+        flags.set(Flags.Flag.HALF_CARRY, true);
+        return 8;
+    }
+
+    public int setBit(Register register, Register.RegByte regByte, int bitPosition) {
+        if (regByte == Register.RegByte.WORD) {
+            System.out.println("Operation not supported rotateRight WORD");
+            return 16;
+        }
+
+        int value = regByte == Register.RegByte.HI ? register.getHi() : register.getLo();
+        int result = Helpful.setBit(value, bitPosition, true);
+        if (regByte == Register.RegByte.HI) {
+            register.setHi(result);
+        } else if (regByte == Register.RegByte.LO) {
+            register.setLo(result);
+        }
+
+        return 8;
+    }
+
+    // basically a duplicate of setBit with false instead of true. should probably refactor this eventually...
+    public int resetBit(Register register, Register.RegByte regByte, int bitPosition) {
+        if (regByte == Register.RegByte.WORD) {
+            System.out.println("Operation not supported rotateRight WORD");
+            return 16;
+        }
+
+        int value = regByte == Register.RegByte.HI ? register.getHi() : register.getLo();
+        int result = Helpful.setBit(value, bitPosition, false);
+        if (regByte == Register.RegByte.HI) {
+            register.setHi(result);
+        } else if (regByte == Register.RegByte.LO) {
+            register.setLo(result);
+        }
+
+        return 8;
     }
 
 
@@ -245,8 +335,6 @@ public class CPU {
 
     public int fetchDecodeExecute() {
         int opcode = this.memory.generalMemory[programCounter];
-
-//        System.out.printf("Instruction for PC %x is 0x%x\n", programCounter, opcode);
 
         int cycles = 0;
 
@@ -1278,43 +1366,16 @@ public class CPU {
             case 0x07: {
                 // RLCA
                 // page 99
-                int regA = registerAF.getHi();
 
-                boolean oldBit7 = Helpful.getBit(regA, 0);
-                boolean carry = flags.isSet(Flags.Flag.CARRY);
-
-                int result = regA << 1;
-
-                // Only difference between 0x07 and 0x17 is setting this bit
-                result = Helpful.setBit(result, 0, carry);
-
-                flags.set(Flags.Flag.CARRY, oldBit7);
-                flags.set(Flags.Flag.ZERO, result == 0);
-                flags.set(Flags.Flag.HALF_CARRY, false);
-                flags.set(Flags.Flag.SUBTRACT, false);
-
-                registerAF.setHi(result);
-                cycles = 4;
+                cycles = rotate(RotateDirection.LEFT, registerAF, Register.RegByte.HI, true);
                 break;
             }
 
             case 0x17: {
                 // RLA
                 // page 99
-                int regA = registerAF.getHi();
 
-                boolean oldBit7 = Helpful.getBit(regA, 7);
-
-
-                int result = regA << 1;
-
-                flags.set(Flags.Flag.CARRY, oldBit7);
-                flags.set(Flags.Flag.ZERO, result == 0);
-                flags.set(Flags.Flag.HALF_CARRY, false);
-                flags.set(Flags.Flag.SUBTRACT, false);
-
-                registerAF.setHi(result);
-                cycles = 4;
+                cycles = rotate(RotateDirection.LEFT, registerAF, Register.RegByte.HI, false);
                 break;
             }
 
@@ -1322,7 +1383,7 @@ public class CPU {
                 // RRCA
                 // page 100
 
-                cycles = rotate(RotateDirection.RIGHT,registerAF, Register.RegByte.HI, true);
+                cycles = rotate(RotateDirection.RIGHT, registerAF, Register.RegByte.HI, true);
 
                 break;
             }
@@ -1330,98 +1391,288 @@ public class CPU {
             case 0x1F: {
                 // RRA
                 // page 100
-                cycles = rotate(RotateDirection.RIGHT,registerAF, Register.RegByte.HI, false);
+                cycles = rotate(RotateDirection.RIGHT, registerAF, Register.RegByte.HI, false);
                 break;
             }
 
             // Jumps
-
+            // JP nn
+            // page 111
             case 0xC3: {
-                // JP nn
-                // page 111
+
+                forceProgramCounterToPosition(this.memory.readWordFromLocation(programCounter + 1), true);
+                // cycles might not be reflected here...
+                cycles = 12;
                 break;
             }
 
-            case 0xC2:
-            case 0xCA:
-            case 0xD2:
+            // JP cc,nn
+            // page 111
+            case 0xC2: {
+                // if Z flag is reset
+                if (!flags.isSet(Flags.Flag.ZERO)) {
+                    forceProgramCounterToPosition(this.memory.readWordFromLocation(programCounter + 1), true);
+                }
+                cycles = 12;
+                break;
+            }
+            case 0xCA: {
+                if (flags.isSet(Flags.Flag.ZERO)) {
+                    forceProgramCounterToPosition(this.memory.readWordFromLocation(programCounter + 1), true);
+                }
+                cycles = 12;
+                break;
+            }
+            case 0xD2: {
+                if (!flags.isSet(Flags.Flag.CARRY)) {
+                    forceProgramCounterToPosition(this.memory.readWordFromLocation(programCounter + 1), true);
+                }
+                cycles = 12;
+                break;
+            }
             case 0xDA: {
-                // JP cc,nn
-                // page 111
+
+                if (flags.isSet(Flags.Flag.CARRY)) {
+                    forceProgramCounterToPosition(this.memory.readWordFromLocation(programCounter + 1), true);
+                }
+                cycles = 12;
                 break;
             }
 
             case 0xE9: {
                 // JP (HL)
                 // page 112
+                forceProgramCounterToPosition(registerHL.getReg(), true);
+                cycles = 4;
                 break;
             }
 
             case 0x18: {
                 // JR n
                 // page 112
+                int immediateByte = this.memory.readByteFromLocation(programCounter + 1);
+                programCounter = programCounter + immediateByte;
+                forceProgramCounterToPosition(programCounter, true);
+                cycles = 8;
                 break;
             }
 
-            case 0x20:
-            case 0x28:
-            case 0x30:
+
+            // JR cc,n
+            // page 113
+
+            case 0x20: {
+                if (!flags.isSet(Flags.Flag.ZERO)) {
+                    forceProgramCounterToPosition(this.memory.readByteFromLocation(programCounter + 1), true);
+                }
+                cycles = 8;
+                break;
+            }
+            case 0x28: {
+                if (flags.isSet(Flags.Flag.ZERO)) {
+                    forceProgramCounterToPosition(this.memory.readByteFromLocation(programCounter + 1), true);
+                }
+                cycles = 8;
+                break;
+            }
+            case 0x30: {
+                if (!flags.isSet(Flags.Flag.CARRY)) {
+                    forceProgramCounterToPosition(this.memory.readByteFromLocation(programCounter + 1), true);
+                }
+                cycles = 8;
+                break;
+            }
             case 0x38: {
-                // JR cc,n
-                // page 113
+
+                if (flags.isSet(Flags.Flag.CARRY)) {
+                    forceProgramCounterToPosition(this.memory.readByteFromLocation(programCounter + 1), true);
+                }
+                cycles = 8;
                 break;
             }
 
             // Calls
+            // CALL nn
+            // page 114
             case 0xCD: {
-                // CALL nn
-                // page 114
+
+                int secondByte = this.memory.readByteFromLocation(programCounter + 1);
+                stackPointer = programCounter;
+                forceProgramCounterToPosition(secondByte, true);
+                cycles = 12;
                 break;
             }
 
-            case 0xC4:
-            case 0xCC:
-            case 0xD4:
-            case 0xDC: {
-                // CALL cc,nn
-                // page 115
+            // CALL cc,nn
+            // page 115
+
+            case 0xC4: {
+                if (!flags.isSet(Flags.Flag.ZERO)) {
+                    int secondByte = this.memory.readByteFromLocation(programCounter + 1);
+                    stackPointer = programCounter;
+                    forceProgramCounterToPosition(secondByte, true);
+                    cycles = 12;
+                    break;
+                }
+                cycles = 8;
                 break;
+            }
+            case 0xCC: {
+                if (flags.isSet(Flags.Flag.ZERO)) {
+                    int secondByte = this.memory.readByteFromLocation(programCounter + 1);
+                    stackPointer = programCounter;
+                    forceProgramCounterToPosition(secondByte, true);
+                    cycles = 12;
+                    break;
+                }
+                cycles = 8;
+                break;
+            }
+            case 0xD4: {
+                if (!flags.isSet(Flags.Flag.CARRY)) {
+                    int secondByte = this.memory.readByteFromLocation(programCounter + 1);
+                    stackPointer = programCounter;
+                    forceProgramCounterToPosition(secondByte, true);
+                    cycles = 12;
+                    break;
+                }
+                cycles = 8;
+                break;
+            }
+            case 0xDC: {
+                if (flags.isSet(Flags.Flag.CARRY)) {
+                    int secondByte = this.memory.readByteFromLocation(programCounter + 1);
+                    stackPointer = programCounter;
+                    forceProgramCounterToPosition(secondByte, true);
+                    cycles = 12;
+                    break;
+                }
+                cycles = 8;
+                break;
+
             }
 
             // Restarts
-            case 0xC7:
-            case 0xCF:
-            case 0xD7:
-            case 0xDF:
-            case 0xE7:
-            case 0xEF:
-            case 0xF7:
-            case 0xFF: {
-                // RST n
-                // page 116
+            // RST n
+            // page 116
+            case 0xC7: {
+                stackPointer = programCounter;
+                forceProgramCounterToPosition(0x00, true);
+                cycles = 32;
                 break;
+            }
+            case 0xCF: {
+                stackPointer = programCounter;
+                forceProgramCounterToPosition(0x08, true);
+                cycles = 32;
+                break;
+            }
+            case 0xD7: {
+                stackPointer = programCounter;
+                forceProgramCounterToPosition(0x10, true);
+                cycles = 32;
+                break;
+            }
+            case 0xDF: {
+                stackPointer = programCounter;
+                forceProgramCounterToPosition(0x18, true);
+                cycles = 32;
+                break;
+            }
+            case 0xE7: {
+                stackPointer = programCounter;
+                forceProgramCounterToPosition(0x20, true);
+                cycles = 32;
+                break;
+            }
+            case 0xEF: {
+                stackPointer = programCounter;
+                forceProgramCounterToPosition(0x28, true);
+                cycles = 32;
+                break;
+            }
+            case 0xF7: {
+                stackPointer = programCounter;
+                forceProgramCounterToPosition(0x30, true);
+                cycles = 32;
+                break;
+            }
+            case 0xFF: {
+                stackPointer = programCounter;
+                forceProgramCounterToPosition(0x38, true);
+                cycles = 32;
+                break;
+
+
             }
 
             // Returns
-
+            // RET
+            // page 117
             case 0xC9: {
-                // RET
-                // page 117
+
+                int address = stackPointer;
+                int value = (memory.readByteFromLocation(address + 1) << 8) | memory.readByteFromLocation(address);
+                stackPointer = stackPointer + 2;
+                forceProgramCounterToPosition(value, true);
+                cycles = 8;
                 break;
             }
 
-            case 0xC0:
-            case 0xC8:
-            case 0xD0:
+
+            // RET cc
+            // page 117
+            case 0xC0: {
+                if (!flags.isSet(Flags.Flag.ZERO)) {
+                    int address = stackPointer;
+                    int value = (memory.readByteFromLocation(address + 1) << 8) | memory.readByteFromLocation(address);
+                    stackPointer = stackPointer + 2;
+                    forceProgramCounterToPosition(value, true);
+                }
+                cycles = 8;
+                break;
+            }
+            case 0xC8: {
+                if (flags.isSet(Flags.Flag.ZERO)) {
+                    int address = stackPointer;
+                    int value = (memory.readByteFromLocation(address + 1) << 8) | memory.readByteFromLocation(address);
+                    stackPointer = stackPointer + 2;
+                    forceProgramCounterToPosition(value, true);
+                }
+                cycles = 8;
+                break;
+            }
+            case 0xD0: {
+                if (!flags.isSet(Flags.Flag.CARRY)) {
+                    int address = stackPointer;
+                    int value = (memory.readByteFromLocation(address + 1) << 8) | memory.readByteFromLocation(address);
+                    stackPointer = stackPointer + 2;
+                    forceProgramCounterToPosition(value, true);
+                }
+                cycles = 8;
+                break;
+            }
             case 0xD8: {
-                // RET cc
-                // page 117
+                if (flags.isSet(Flags.Flag.CARRY)) {
+                    int address = stackPointer;
+                    int value = (memory.readByteFromLocation(address + 1) << 8) | memory.readByteFromLocation(address);
+                    stackPointer = stackPointer + 2;
+                    forceProgramCounterToPosition(value, true);
+                }
+                cycles = 8;
+
                 break;
             }
 
             case 0xD9: {
                 // RETI
                 // page 118
+                int address = stackPointer;
+                int value = (memory.readByteFromLocation(address + 1) << 8) | memory.readByteFromLocation(address);
+                stackPointer = stackPointer + 2;
+                forceProgramCounterToPosition(value, true);
+                cycles = 8;
+                interruptsEnabled = true;
                 break;
             }
 
@@ -1433,6 +1684,8 @@ public class CPU {
                     // STOP
                     // page 97
                     cycles = 4;
+                } else {
+                    System.out.printf(" :: 0x%x missing :: ", secondOpcode);
                 }
                 break;
             }
@@ -1476,140 +1729,837 @@ public class CPU {
                         cycles = 16;
                         break;
 
-                    case 0x07:
+                    case 0x07: {
+                        cycles = rotate(RotateDirection.LEFT, registerAF, Register.RegByte.HI, true);
+                        // Add 4 to the cycle count because 0xCB07 is different to 0x07 for some reason?
+                        cycles += 4;
+                        break;
+                    }
+
+                    // RLC n
+                    // page 101
                     case 0x00:
+                        cycles = rotate(RotateDirection.LEFT, registerBC, Register.RegByte.HI, true);
+                        break;
                     case 0x01:
+                        cycles = rotate(RotateDirection.LEFT, registerBC, Register.RegByte.LO, true);
+                        break;
                     case 0x02:
+                        cycles = rotate(RotateDirection.LEFT, registerDE, Register.RegByte.HI, true);
+                        break;
                     case 0x03:
+                        cycles = rotate(RotateDirection.LEFT, registerDE, Register.RegByte.LO, true);
+                        break;
                     case 0x04:
+                        cycles = rotate(RotateDirection.LEFT, registerHL, Register.RegByte.HI, true);
+                        break;
                     case 0x05:
-                    case 0x06: {
-                        // RLC n
-                        // page 101
+                        cycles = rotate(RotateDirection.LEFT, registerHL, Register.RegByte.LO, true);
+                        break;
+                    case 0x06:
+                        rotate(RotateDirection.LEFT, registerHL, Register.RegByte.WORD, true);
+                        cycles = 16;
+                        break;
+
+
+                    // RL n
+                    // page 102
+                    case 0x17: {
+                        cycles = rotate(RotateDirection.LEFT, registerAF, Register.RegByte.HI, false);
+                        // Add 4 to the cycle count because 0xCB07 is different to 0x07 for some reason?
+                        cycles += 4;
                         break;
                     }
-
-                    case 0x17:
                     case 0x10:
+                        cycles = rotate(RotateDirection.LEFT, registerBC, Register.RegByte.HI, false);
+                        break;
                     case 0x11:
+                        cycles = rotate(RotateDirection.LEFT, registerBC, Register.RegByte.LO, false);
+                        break;
                     case 0x12:
+                        cycles = rotate(RotateDirection.LEFT, registerDE, Register.RegByte.HI, false);
+                        break;
                     case 0x13:
+                        cycles = rotate(RotateDirection.LEFT, registerDE, Register.RegByte.LO, false);
+                        break;
                     case 0x14:
+                        cycles = rotate(RotateDirection.LEFT, registerHL, Register.RegByte.HI, false);
+                        break;
                     case 0x15:
+                        cycles = rotate(RotateDirection.LEFT, registerHL, Register.RegByte.LO, false);
+                        break;
                     case 0x16: {
-                        // RL n
-                        // page 102
+                        rotate(RotateDirection.LEFT, registerHL, Register.RegByte.WORD, false);
+                        cycles = 16;
                         break;
                     }
 
-                    case 0x0F:
+                    // RRC n
+                    // page 103
+
+                    case 0x0F: {
+                        cycles = rotate(RotateDirection.RIGHT, registerAF, Register.RegByte.HI, true);
+                        // Add 4 to the cycle count because 0xCB07 is different to 0x07 for some reason?
+                        cycles += 4;
+                        break;
+                    }
                     case 0x08:
+                        cycles = rotate(RotateDirection.RIGHT, registerBC, Register.RegByte.HI, true);
+                        break;
                     case 0x09:
+                        cycles = rotate(RotateDirection.RIGHT, registerBC, Register.RegByte.LO, true);
+                        break;
                     case 0x0A:
+                        cycles = rotate(RotateDirection.RIGHT, registerDE, Register.RegByte.HI, true);
+                        break;
                     case 0x0B:
+                        cycles = rotate(RotateDirection.RIGHT, registerDE, Register.RegByte.LO, true);
+                        break;
                     case 0x0C:
+                        cycles = rotate(RotateDirection.RIGHT, registerHL, Register.RegByte.HI, true);
+                        break;
                     case 0x0D:
+                        cycles = rotate(RotateDirection.RIGHT, registerHL, Register.RegByte.LO, true);
+                        break;
                     case 0x0E: {
-                        // RRC n
-                        // page 103
+
+                        rotate(RotateDirection.RIGHT, registerHL, Register.RegByte.WORD, true);
+                        cycles = 16;
                         break;
                     }
 
-                    case 0x1F:
+                    // RR n
+                    // page 104
+                    case 0x1F: {
+                        cycles = rotate(RotateDirection.RIGHT, registerAF, Register.RegByte.HI, false);
+                        cycles += 4;
+                        break;
+                    }
                     case 0x18:
+                        cycles = rotate(RotateDirection.RIGHT, registerBC, Register.RegByte.HI, false);
+                        break;
                     case 0x19:
+                        cycles = rotate(RotateDirection.RIGHT, registerBC, Register.RegByte.LO, false);
+                        break;
                     case 0x1A:
+                        cycles = rotate(RotateDirection.RIGHT, registerDE, Register.RegByte.HI, false);
+                        break;
                     case 0x1B:
+                        cycles = rotate(RotateDirection.RIGHT, registerDE, Register.RegByte.LO, false);
+                        break;
                     case 0x1C:
+                        cycles = rotate(RotateDirection.RIGHT, registerHL, Register.RegByte.HI, false);
+                        break;
                     case 0x1D:
+                        cycles = rotate(RotateDirection.RIGHT, registerHL, Register.RegByte.LO, false);
+                        break;
                     case 0x1E: {
-                        // RR n
-                        // page 104
+
+                        rotate(RotateDirection.RIGHT, registerHL, Register.RegByte.WORD, false);
+                        cycles = 16;
                         break;
+
                     }
 
+
+                    // SLA n
+                    // page 105
                     case 0x27:
+                        cycles = shift(RotateDirection.LEFT, registerAF, Register.RegByte.HI, false);
+                        break;
                     case 0x20:
+                        cycles = shift(RotateDirection.LEFT, registerBC, Register.RegByte.HI, false);
+                        break;
                     case 0x21:
+                        cycles = shift(RotateDirection.LEFT, registerBC, Register.RegByte.LO, false);
+                        break;
                     case 0x22:
+                        cycles = shift(RotateDirection.LEFT, registerDE, Register.RegByte.HI, false);
+                        break;
                     case 0x23:
+                        cycles = shift(RotateDirection.LEFT, registerDE, Register.RegByte.LO, false);
+                        break;
                     case 0x24:
+                        cycles = shift(RotateDirection.LEFT, registerHL, Register.RegByte.HI, false);
+                        break;
                     case 0x25:
-                    case 0x26: {
-                        // SLA n
-                        // page 105
+                        cycles = shift(RotateDirection.LEFT, registerHL, Register.RegByte.LO, false);
                         break;
-                    }
+                    case 0x26:
+                        cycles = shift(RotateDirection.LEFT, registerHL, Register.RegByte.WORD, false);
+                        break;
 
+                    // SRA n
+                    // page 106
                     case 0x2F:
+                        cycles = shift(RotateDirection.RIGHT, registerAF, Register.RegByte.HI, false);
+                        break;
                     case 0x28:
+                        cycles = shift(RotateDirection.RIGHT, registerBC, Register.RegByte.HI, false);
+                        break;
                     case 0x29:
+                        cycles = shift(RotateDirection.RIGHT, registerBC, Register.RegByte.LO, false);
+                        break;
                     case 0x2A:
+                        cycles = shift(RotateDirection.RIGHT, registerDE, Register.RegByte.HI, false);
+                        break;
                     case 0x2B:
+                        cycles = shift(RotateDirection.RIGHT, registerDE, Register.RegByte.LO, false);
+                        break;
                     case 0x2C:
+                        cycles = shift(RotateDirection.RIGHT, registerHL, Register.RegByte.HI, false);
+                        break;
                     case 0x2D:
-                    case 0x2E: {
-                        // SRA n
-                        // page 106
+                        cycles = shift(RotateDirection.RIGHT, registerHL, Register.RegByte.LO, false);
                         break;
-                    }
+                    case 0x2E:
+                        cycles = shift(RotateDirection.RIGHT, registerHL, Register.RegByte.WORD, false);
+                        break;
 
+                    // SRL n
+                    // page 107
                     case 0x3F:
-                    case 0x38:
-                    case 0x39:
-                    case 0x3A:
-                    case 0x3B:
-                    case 0x3C:
-                    case 0x3D:
-                    case 0x3E: {
-                        // SRL n
-                        // page 107
+                        cycles = shift(RotateDirection.RIGHT, registerAF, Register.RegByte.HI, true);
                         break;
-                    }
+                    case 0x38:
+                        cycles = shift(RotateDirection.RIGHT, registerBC, Register.RegByte.HI, true);
+                        break;
+                    case 0x39:
+                        cycles = shift(RotateDirection.RIGHT, registerBC, Register.RegByte.LO, true);
+                        break;
+                    case 0x3A:
+                        cycles = shift(RotateDirection.RIGHT, registerDE, Register.RegByte.HI, true);
+                        break;
+                    case 0x3B:
+                        cycles = shift(RotateDirection.RIGHT, registerDE, Register.RegByte.LO, true);
+                        break;
+                    case 0x3C:
+                        cycles = shift(RotateDirection.RIGHT, registerHL, Register.RegByte.HI, true);
+                        break;
+                    case 0x3D:
+                        cycles = shift(RotateDirection.RIGHT, registerHL, Register.RegByte.LO, true);
+                        break;
+                    case 0x3E:
+                        cycles = shift(RotateDirection.RIGHT, registerHL, Register.RegByte.WORD, true);
+                        break;
+
 
                     // Bit Opcodes
 
-                    case 0x47:
+                    // BIT b,r
+                    // 0xCB40 -> 0xCB70
+                    // 40 -> 47 :: bit 0 (B, C, D, E, F, H, L, (HL), A)
+                    // 48 -> 4F :: bit 1
+                    // 50 -> 57 :: bit 2
+                    // 58 -> 5F :: bit 3
+                    // 60 -> 67 :: bit 4
+                    // 68 -> 6F :: bit 5
+                    // 70 -> 77 :: bit 6
+                    // 78 -> 7F :: bit 7
+
+                    // bit 0
                     case 0x40:
+                        cycles = testRegisterBit(registerBC, Register.RegByte.HI, 0);
+                        break;
                     case 0x41:
+                        cycles = testRegisterBit(registerBC, Register.RegByte.LO, 0);
+                        break;
                     case 0x42:
+                        cycles = testRegisterBit(registerDE, Register.RegByte.HI, 0);
+                        break;
                     case 0x43:
+                        cycles = testRegisterBit(registerDE, Register.RegByte.LO, 0);
+                        break;
                     case 0x44:
+                        cycles = testRegisterBit(registerHL, Register.RegByte.HI, 0);
+                        break;
                     case 0x45:
-                    case 0x46: {
-                        // BIT b,r
-                        // page 108
+                        cycles = testRegisterBit(registerHL, Register.RegByte.LO, 0);
                         break;
-                    }
+                    case 0x46:
+                        cycles = testRegisterBit(registerHL, Register.RegByte.WORD, 0);
+                        break;
+                    case 0x47:
+                        cycles = testRegisterBit(registerAF, Register.RegByte.HI, 0);
+                        break;
 
-                    case 0xC7:
+                    // bit 1
+                    case 0x48:
+                        cycles = testRegisterBit(registerBC, Register.RegByte.HI, 1);
+                        break;
+                    case 0x49:
+                        cycles = testRegisterBit(registerBC, Register.RegByte.LO, 1);
+                        break;
+                    case 0x4A:
+                        cycles = testRegisterBit(registerDE, Register.RegByte.HI, 1);
+                        break;
+                    case 0x4B:
+                        cycles = testRegisterBit(registerDE, Register.RegByte.LO, 1);
+                        break;
+                    case 0x4C:
+                        cycles = testRegisterBit(registerHL, Register.RegByte.HI, 1);
+                        break;
+                    case 0x4D:
+                        cycles = testRegisterBit(registerHL, Register.RegByte.LO, 1);
+                        break;
+                    case 0x4E:
+                        cycles = testRegisterBit(registerHL, Register.RegByte.WORD, 1);
+                        break;
+                    case 0x4F:
+                        cycles = testRegisterBit(registerAF, Register.RegByte.HI, 1);
+                        break;
+
+                    // bit 2
+                    case 0x50:
+                        cycles = testRegisterBit(registerBC, Register.RegByte.HI, 2);
+                        break;
+                    case 0x51:
+                        cycles = testRegisterBit(registerBC, Register.RegByte.LO, 2);
+                        break;
+                    case 0x52:
+                        cycles = testRegisterBit(registerDE, Register.RegByte.HI, 2);
+                        break;
+                    case 0x53:
+                        cycles = testRegisterBit(registerDE, Register.RegByte.LO, 2);
+                        break;
+                    case 0x54:
+                        cycles = testRegisterBit(registerHL, Register.RegByte.HI, 2);
+                        break;
+                    case 0x55:
+                        cycles = testRegisterBit(registerHL, Register.RegByte.LO, 2);
+                        break;
+                    case 0x56:
+                        cycles = testRegisterBit(registerHL, Register.RegByte.WORD, 2);
+                        break;
+                    case 0x57:
+                        cycles = testRegisterBit(registerAF, Register.RegByte.HI, 2);
+                        break;
+
+                    // bit 3
+                    case 0x58:
+                        cycles = testRegisterBit(registerBC, Register.RegByte.HI, 3);
+                        break;
+                    case 0x59:
+                        cycles = testRegisterBit(registerBC, Register.RegByte.LO, 3);
+                        break;
+                    case 0x5A:
+                        cycles = testRegisterBit(registerDE, Register.RegByte.HI, 3);
+                        break;
+                    case 0x5B:
+                        cycles = testRegisterBit(registerDE, Register.RegByte.LO, 3);
+                        break;
+                    case 0x5C:
+                        cycles = testRegisterBit(registerHL, Register.RegByte.HI, 3);
+                        break;
+                    case 0x5D:
+                        cycles = testRegisterBit(registerHL, Register.RegByte.LO, 3);
+                        break;
+                    case 0x5E:
+                        cycles = testRegisterBit(registerHL, Register.RegByte.WORD, 3);
+                        break;
+                    case 0x5F:
+                        cycles = testRegisterBit(registerAF, Register.RegByte.HI, 3);
+                        break;
+
+                    // bit 4
+                    case 0x60:
+                        cycles = testRegisterBit(registerBC, Register.RegByte.HI, 4);
+                        break;
+                    case 0x61:
+                        cycles = testRegisterBit(registerBC, Register.RegByte.LO, 4);
+                        break;
+                    case 0x62:
+                        cycles = testRegisterBit(registerDE, Register.RegByte.HI, 4);
+                        break;
+                    case 0x63:
+                        cycles = testRegisterBit(registerDE, Register.RegByte.LO, 4);
+                        break;
+                    case 0x64:
+                        cycles = testRegisterBit(registerHL, Register.RegByte.HI, 4);
+                        break;
+                    case 0x65:
+                        cycles = testRegisterBit(registerHL, Register.RegByte.LO, 4);
+                        break;
+                    case 0x66:
+                        cycles = testRegisterBit(registerHL, Register.RegByte.WORD, 4);
+                        break;
+                    case 0x67:
+                        cycles = testRegisterBit(registerAF, Register.RegByte.HI, 4);
+                        break;
+
+                    // bit 5
+                    case 0x68:
+                        cycles = testRegisterBit(registerBC, Register.RegByte.HI, 5);
+                        break;
+                    case 0x69:
+                        cycles = testRegisterBit(registerBC, Register.RegByte.LO, 5);
+                        break;
+                    case 0x6A:
+                        cycles = testRegisterBit(registerDE, Register.RegByte.HI, 5);
+                        break;
+                    case 0x6B:
+                        cycles = testRegisterBit(registerDE, Register.RegByte.LO, 5);
+                        break;
+                    case 0x6C:
+                        cycles = testRegisterBit(registerHL, Register.RegByte.HI, 5);
+                        break;
+                    case 0x6D:
+                        cycles = testRegisterBit(registerHL, Register.RegByte.LO, 5);
+                        break;
+                    case 0x6E:
+                        cycles = testRegisterBit(registerHL, Register.RegByte.WORD, 5);
+                        break;
+                    case 0x6F:
+                        cycles = testRegisterBit(registerAF, Register.RegByte.HI, 5);
+                        break;
+
+                    // bit 6
+                    case 0x70:
+                        cycles = testRegisterBit(registerBC, Register.RegByte.HI, 6);
+                        break;
+                    case 0x71:
+                        cycles = testRegisterBit(registerBC, Register.RegByte.LO, 6);
+                        break;
+                    case 0x72:
+                        cycles = testRegisterBit(registerDE, Register.RegByte.HI, 6);
+                        break;
+                    case 0x73:
+                        cycles = testRegisterBit(registerDE, Register.RegByte.LO, 6);
+                        break;
+                    case 0x74:
+                        cycles = testRegisterBit(registerHL, Register.RegByte.HI, 6);
+                        break;
+                    case 0x75:
+                        cycles = testRegisterBit(registerHL, Register.RegByte.LO, 6);
+                        break;
+                    case 0x76:
+                        cycles = testRegisterBit(registerHL, Register.RegByte.WORD, 6);
+                        break;
+                    case 0x77:
+                        cycles = testRegisterBit(registerAF, Register.RegByte.HI, 6);
+                        break;
+
+                    // bit 7
+                    case 0x78:
+                        cycles = testRegisterBit(registerBC, Register.RegByte.HI, 7);
+                        break;
+                    case 0x79:
+                        cycles = testRegisterBit(registerBC, Register.RegByte.LO, 7);
+                        break;
+                    case 0x7A:
+                        cycles = testRegisterBit(registerDE, Register.RegByte.HI, 7);
+                        break;
+                    case 0x7B:
+                        cycles = testRegisterBit(registerDE, Register.RegByte.LO, 7);
+                        break;
+                    case 0x7C:
+                        cycles = testRegisterBit(registerHL, Register.RegByte.HI, 7);
+                        break;
+                    case 0x7D:
+                        cycles = testRegisterBit(registerHL, Register.RegByte.LO, 7);
+                        break;
+                    case 0x7E:
+                        cycles = testRegisterBit(registerHL, Register.RegByte.WORD, 7);
+                        break;
+                    case 0x7F:
+                        cycles = testRegisterBit(registerAF, Register.RegByte.HI, 7);
+                        break;
+
+
+                    // SET b, r
+                    // c0 -> ff
                     case 0xC0:
+                        cycles = setBit(registerBC, Register.RegByte.HI, 0);
+                        break;
                     case 0xC1:
+                        cycles = setBit(registerBC, Register.RegByte.LO, 0);
+                        break;
                     case 0xC2:
+                        cycles = setBit(registerDE, Register.RegByte.HI, 0);
+                        break;
                     case 0xC3:
+                        cycles = setBit(registerDE, Register.RegByte.LO, 0);
+                        break;
                     case 0xC4:
+                        cycles = setBit(registerHL, Register.RegByte.HI, 0);
+                        break;
                     case 0xC5:
-                    case 0xC6: {
-                        // SET b,r
-                        // page 109
+                        cycles = setBit(registerHL, Register.RegByte.LO, 0);
                         break;
-                    }
+                    case 0xC6:
+                        cycles = setBit(registerHL, Register.RegByte.WORD, 0);
+                        break;
+                    case 0xC7:
+                        cycles = setBit(registerAF, Register.RegByte.HI, 0);
+                        break;
+                    case 0xC8:
+                        cycles = setBit(registerBC, Register.RegByte.HI, 1);
+                        break;
+                    case 0xC9:
+                        cycles = setBit(registerBC, Register.RegByte.LO, 1);
+                        break;
+                    case 0xCA:
+                        cycles = setBit(registerDE, Register.RegByte.HI, 1);
+                        break;
+                    case 0xCB:
+                        cycles = setBit(registerDE, Register.RegByte.LO, 1);
+                        break;
+                    case 0xCC:
+                        cycles = setBit(registerHL, Register.RegByte.HI, 1);
+                        break;
+                    case 0xCD:
+                        cycles = setBit(registerHL, Register.RegByte.LO, 1);
+                        break;
+                    case 0xCE:
+                        cycles = setBit(registerHL, Register.RegByte.WORD, 1);
+                        break;
+                    case 0xCF:
+                        cycles = setBit(registerAF, Register.RegByte.HI, 1);
+                        break;
+                    case 0xD0:
+                        cycles = setBit(registerBC, Register.RegByte.HI, 2);
+                        break;
+                    case 0xD1:
+                        cycles = setBit(registerBC, Register.RegByte.LO, 2);
+                        break;
+                    case 0xD2:
+                        cycles = setBit(registerDE, Register.RegByte.HI, 2);
+                        break;
+                    case 0xD3:
+                        cycles = setBit(registerDE, Register.RegByte.LO, 2);
+                        break;
+                    case 0xD4:
+                        cycles = setBit(registerHL, Register.RegByte.HI, 2);
+                        break;
+                    case 0xD5:
+                        cycles = setBit(registerHL, Register.RegByte.LO, 2);
+                        break;
+                    case 0xD6:
+                        cycles = setBit(registerHL, Register.RegByte.WORD, 2);
+                        break;
+                    case 0xD7:
+                        cycles = setBit(registerAF, Register.RegByte.HI, 2);
+                        break;
+                    case 0xD8:
+                        cycles = setBit(registerBC, Register.RegByte.HI, 3);
+                        break;
+                    case 0xD9:
+                        cycles = setBit(registerBC, Register.RegByte.LO, 3);
+                        break;
+                    case 0xDA:
+                        cycles = setBit(registerDE, Register.RegByte.HI, 3);
+                        break;
+                    case 0xDB:
+                        cycles = setBit(registerDE, Register.RegByte.LO, 3);
+                        break;
+                    case 0xDC:
+                        cycles = setBit(registerHL, Register.RegByte.HI, 3);
+                        break;
+                    case 0xDD:
+                        cycles = setBit(registerHL, Register.RegByte.LO, 3);
+                        break;
+                    case 0xDE:
+                        cycles = setBit(registerHL, Register.RegByte.WORD, 3);
+                        break;
+                    case 0xDF:
+                        cycles = setBit(registerAF, Register.RegByte.HI, 3);
+                        break;
+                    case 0xE0:
+                        cycles = setBit(registerBC, Register.RegByte.HI, 4);
+                        break;
+                    case 0xE1:
+                        cycles = setBit(registerBC, Register.RegByte.LO, 4);
+                        break;
+                    case 0xE2:
+                        cycles = setBit(registerDE, Register.RegByte.HI, 4);
+                        break;
+                    case 0xE3:
+                        cycles = setBit(registerDE, Register.RegByte.LO, 4);
+                        break;
+                    case 0xE4:
+                        cycles = setBit(registerHL, Register.RegByte.HI, 4);
+                        break;
+                    case 0xE5:
+                        cycles = setBit(registerHL, Register.RegByte.LO, 4);
+                        break;
+                    case 0xE6:
+                        cycles = setBit(registerHL, Register.RegByte.WORD, 4);
+                        break;
+                    case 0xE7:
+                        cycles = setBit(registerAF, Register.RegByte.HI, 4);
+                        break;
+                    case 0xE8:
+                        cycles = setBit(registerBC, Register.RegByte.HI, 5);
+                        break;
+                    case 0xE9:
+                        cycles = setBit(registerBC, Register.RegByte.LO, 5);
+                        break;
+                    case 0xEA:
+                        cycles = setBit(registerDE, Register.RegByte.HI, 5);
+                        break;
+                    case 0xEB:
+                        cycles = setBit(registerDE, Register.RegByte.LO, 5);
+                        break;
+                    case 0xEC:
+                        cycles = setBit(registerHL, Register.RegByte.HI, 5);
+                        break;
+                    case 0xED:
+                        cycles = setBit(registerHL, Register.RegByte.LO, 5);
+                        break;
+                    case 0xEE:
+                        cycles = setBit(registerHL, Register.RegByte.WORD, 5);
+                        break;
+                    case 0xEF:
+                        cycles = setBit(registerAF, Register.RegByte.HI, 5);
+                        break;
+                    case 0xF0:
+                        cycles = setBit(registerBC, Register.RegByte.HI, 6);
+                        break;
+                    case 0xF1:
+                        cycles = setBit(registerBC, Register.RegByte.LO, 6);
+                        break;
+                    case 0xF2:
+                        cycles = setBit(registerDE, Register.RegByte.HI, 6);
+                        break;
+                    case 0xF3:
+                        cycles = setBit(registerDE, Register.RegByte.LO, 6);
+                        break;
+                    case 0xF4:
+                        cycles = setBit(registerHL, Register.RegByte.HI, 6);
+                        break;
+                    case 0xF5:
+                        cycles = setBit(registerHL, Register.RegByte.LO, 6);
+                        break;
+                    case 0xF6:
+                        cycles = setBit(registerHL, Register.RegByte.WORD, 6);
+                        break;
+                    case 0xF7:
+                        cycles = setBit(registerAF, Register.RegByte.HI, 6);
+                        break;
+                    case 0xF8:
+                        cycles = setBit(registerBC, Register.RegByte.HI, 7);
+                        break;
+                    case 0xF9:
+                        cycles = setBit(registerBC, Register.RegByte.LO, 7);
+                        break;
+                    case 0xFA:
+                        cycles = setBit(registerDE, Register.RegByte.HI, 7);
+                        break;
+                    case 0xFB:
+                        cycles = setBit(registerDE, Register.RegByte.LO, 7);
+                        break;
+                    case 0xFC:
+                        cycles = setBit(registerHL, Register.RegByte.HI, 7);
+                        break;
+                    case 0xFD:
+                        cycles = setBit(registerHL, Register.RegByte.LO, 7);
+                        break;
+                    case 0xFE:
+                        cycles = setBit(registerHL, Register.RegByte.WORD, 7);
+                        break;
+                    case 0xFF:
+                        cycles = setBit(registerAF, Register.RegByte.HI, 7);
+                        break;
 
-                    case 0x87:
+                    // RES b,r
+                    // page 110
+// 0x80 -> 0xbf
                     case 0x80:
-                    case 0x81:
-                    case 0x82:
-                    case 0x83:
-                    case 0x84:
-                    case 0x85:
-                    case 0x86: {
-                        // RES b,r
-                        // page 110
+                        cycles = resetBit(registerBC, Register.RegByte.HI, 0);
                         break;
-                    }
+                    case 0x81:
+                        cycles = resetBit(registerBC, Register.RegByte.LO, 0);
+                        break;
+                    case 0x82:
+                        cycles = resetBit(registerDE, Register.RegByte.HI, 0);
+                        break;
+                    case 0x83:
+                        cycles = resetBit(registerDE, Register.RegByte.LO, 0);
+                        break;
+                    case 0x84:
+                        cycles = resetBit(registerHL, Register.RegByte.HI, 0);
+                        break;
+                    case 0x85:
+                        cycles = resetBit(registerHL, Register.RegByte.LO, 0);
+                        break;
+                    case 0x86:
+                        cycles = resetBit(registerHL, Register.RegByte.WORD, 0);
+                        break;
+                    case 0x87:
+                        cycles = resetBit(registerAF, Register.RegByte.HI, 0);
+                        break;
+                    case 0x88:
+                        cycles = resetBit(registerBC, Register.RegByte.HI, 1);
+                        break;
+                    case 0x89:
+                        cycles = resetBit(registerBC, Register.RegByte.LO, 1);
+                        break;
+                    case 0x8A:
+                        cycles = resetBit(registerDE, Register.RegByte.HI, 1);
+                        break;
+                    case 0x8B:
+                        cycles = resetBit(registerDE, Register.RegByte.LO, 1);
+                        break;
+                    case 0x8C:
+                        cycles = resetBit(registerHL, Register.RegByte.HI, 1);
+                        break;
+                    case 0x8D:
+                        cycles = resetBit(registerHL, Register.RegByte.LO, 1);
+                        break;
+                    case 0x8E:
+                        cycles = resetBit(registerHL, Register.RegByte.WORD, 1);
+                        break;
+                    case 0x8F:
+                        cycles = resetBit(registerAF, Register.RegByte.HI, 1);
+                        break;
+                    case 0x90:
+                        cycles = resetBit(registerBC, Register.RegByte.HI, 2);
+                        break;
+                    case 0x91:
+                        cycles = resetBit(registerBC, Register.RegByte.LO, 2);
+                        break;
+                    case 0x92:
+                        cycles = resetBit(registerDE, Register.RegByte.HI, 2);
+                        break;
+                    case 0x93:
+                        cycles = resetBit(registerDE, Register.RegByte.LO, 2);
+                        break;
+                    case 0x94:
+                        cycles = resetBit(registerHL, Register.RegByte.HI, 2);
+                        break;
+                    case 0x95:
+                        cycles = resetBit(registerHL, Register.RegByte.LO, 2);
+                        break;
+                    case 0x96:
+                        cycles = resetBit(registerHL, Register.RegByte.WORD, 2);
+                        break;
+                    case 0x97:
+                        cycles = resetBit(registerAF, Register.RegByte.HI, 2);
+                        break;
+                    case 0x98:
+                        cycles = resetBit(registerBC, Register.RegByte.HI, 3);
+                        break;
+                    case 0x99:
+                        cycles = resetBit(registerBC, Register.RegByte.LO, 3);
+                        break;
+                    case 0x9A:
+                        cycles = resetBit(registerDE, Register.RegByte.HI, 3);
+                        break;
+                    case 0x9B:
+                        cycles = resetBit(registerDE, Register.RegByte.LO, 3);
+                        break;
+                    case 0x9C:
+                        cycles = resetBit(registerHL, Register.RegByte.HI, 3);
+                        break;
+                    case 0x9D:
+                        cycles = resetBit(registerHL, Register.RegByte.LO, 3);
+                        break;
+                    case 0x9E:
+                        cycles = resetBit(registerHL, Register.RegByte.WORD, 3);
+                        break;
+                    case 0x9F:
+                        cycles = resetBit(registerAF, Register.RegByte.HI, 3);
+                        break;
+                    case 0xA0:
+                        cycles = resetBit(registerBC, Register.RegByte.HI, 4);
+                        break;
+                    case 0xA1:
+                        cycles = resetBit(registerBC, Register.RegByte.LO, 4);
+                        break;
+                    case 0xA2:
+                        cycles = resetBit(registerDE, Register.RegByte.HI, 4);
+                        break;
+                    case 0xA3:
+                        cycles = resetBit(registerDE, Register.RegByte.LO, 4);
+                        break;
+                    case 0xA4:
+                        cycles = resetBit(registerHL, Register.RegByte.HI, 4);
+                        break;
+                    case 0xA5:
+                        cycles = resetBit(registerHL, Register.RegByte.LO, 4);
+                        break;
+                    case 0xA6:
+                        cycles = resetBit(registerHL, Register.RegByte.WORD, 4);
+                        break;
+                    case 0xA7:
+                        cycles = resetBit(registerAF, Register.RegByte.HI, 4);
+                        break;
+                    case 0xA8:
+                        cycles = resetBit(registerBC, Register.RegByte.HI, 5);
+                        break;
+                    case 0xA9:
+                        cycles = resetBit(registerBC, Register.RegByte.LO, 5);
+                        break;
+                    case 0xAA:
+                        cycles = resetBit(registerDE, Register.RegByte.HI, 5);
+                        break;
+                    case 0xAB:
+                        cycles = resetBit(registerDE, Register.RegByte.LO, 5);
+                        break;
+                    case 0xAC:
+                        cycles = resetBit(registerHL, Register.RegByte.HI, 5);
+                        break;
+                    case 0xAD:
+                        cycles = resetBit(registerHL, Register.RegByte.LO, 5);
+                        break;
+                    case 0xAE:
+                        cycles = resetBit(registerHL, Register.RegByte.WORD, 5);
+                        break;
+                    case 0xAF:
+                        cycles = resetBit(registerAF, Register.RegByte.HI, 5);
+                        break;
+                    case 0xB0:
+                        cycles = resetBit(registerBC, Register.RegByte.HI, 6);
+                        break;
+                    case 0xB1:
+                        cycles = resetBit(registerBC, Register.RegByte.LO, 6);
+                        break;
+                    case 0xB2:
+                        cycles = resetBit(registerDE, Register.RegByte.HI, 6);
+                        break;
+                    case 0xB3:
+                        cycles = resetBit(registerDE, Register.RegByte.LO, 6);
+                        break;
+                    case 0xB4:
+                        cycles = resetBit(registerHL, Register.RegByte.HI, 6);
+                        break;
+                    case 0xB5:
+                        cycles = resetBit(registerHL, Register.RegByte.LO, 6);
+                        break;
+                    case 0xB6:
+                        cycles = resetBit(registerHL, Register.RegByte.WORD, 6);
+                        break;
+                    case 0xB7:
+                        cycles = resetBit(registerAF, Register.RegByte.HI, 6);
+                        break;
+                    case 0xB8:
+                        cycles = resetBit(registerBC, Register.RegByte.HI, 7);
+                        break;
+                    case 0xB9:
+                        cycles = resetBit(registerBC, Register.RegByte.LO, 7);
+                        break;
+                    case 0xBA:
+                        cycles = resetBit(registerDE, Register.RegByte.HI, 7);
+                        break;
+                    case 0xBB:
+                        cycles = resetBit(registerDE, Register.RegByte.LO, 7);
+                        break;
+                    case 0xBC:
+                        cycles = resetBit(registerHL, Register.RegByte.HI, 7);
+                        break;
+                    case 0xBD:
+                        cycles = resetBit(registerHL, Register.RegByte.LO, 7);
+                        break;
+                    case 0xBE:
+                        cycles = resetBit(registerHL, Register.RegByte.WORD, 7);
+                        break;
+                    case 0xBF:
+                        cycles = resetBit(registerAF, Register.RegByte.HI, 7);
+                        break;
 
 
                     default: {
+                        System.out.printf(" :: opcode missing 0x%x :: ", secondOpcode);
                         break;
                     }
                 }
@@ -1624,6 +2574,10 @@ public class CPU {
 
 
         this.programCounter++;
+
+        if (cycles == 0) {
+            System.out.printf("Opcode 0x%x not implemented\n", opcode);
+        }
 
         return cycles;
     }

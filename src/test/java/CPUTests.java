@@ -43,10 +43,11 @@ public class CPUTests {
 
         boolean isRunning = true;
 
-        int testRunningIterations = 1000;
+        int testRunningIterations = 9999999; // run for around 10 million operations (should take 0.5 - 1 seconds)
 
         while (isRunning) {
             int cycles = cpu.fetchDecodeExecute();
+
             testRunningIterations--;
             if (testRunningIterations <= 0) {
                 isRunning = false;
@@ -229,6 +230,77 @@ public class CPUTests {
         cpu.forceProgramCounterToPosition(0x0A, true);
         // at this point the carry bit is set, so RRCA will be 0xd5
         Assert.assertEquals(sampledRegisters.AF.getHi(), 0x55);
+    }
 
+    @Test
+    public void testShifts() throws IOException {
+        Memory memory = new Memory();
+        int[] testRom = new int[0xFF];
+
+        testRom[0x00] = 0x00;
+        // SLA
+        testRom[0x01] = 0xCB; // get into the 0xCBxx opcodes
+        testRom[0x02] = 0x27; // SLA A - shift A left into carry. LSB of A set to 0.
+        testRom[0x03] = 0xCB;
+        testRom[0x04] = 0x20; // SLA B
+        testRom[0x05] = 0xCB;
+        testRom[0x06] = 0x21; // SLA C
+        testRom[0x07] = 0xCB;
+        testRom[0x08] = 0x26; // SLA (HL)
+        // SRA
+        testRom[0x09] = 0xCB;
+        testRom[0x0A] = 0x2F; // SRA A
+        testRom[0x0B] = 0xCB;
+        testRom[0x0C] = 0x28; // SRA B
+        testRom[0x0D] = 0xCB;
+        testRom[0x0E] = 0x2E; // SRA (HL)
+        // SRL
+        testRom[0x0F] = 0xCB;
+        testRom[0x10] = 0x3F; // SRL A
+        testRom[0x11] = 0xCB;
+        testRom[0x12] = 0x28; // SRL B
+        testRom[0x13] = 0xCB;
+        testRom[0x14] = 0x3E; // SRL (HL)
+
+        memory.loadTestRomByteArray(testRom);
+        CPU cpu = new CPU(memory);
+
+        Register.RegisterHash sampledRegisters = cpu.sampleRegisters();
+
+        // reset A, B, C to something not 0x00
+        sampledRegisters.AF.setHi(0xAA);
+        sampledRegisters.BC.setHi(0xBB);
+        sampledRegisters.BC.setLo(0xCC);
+
+        // reset HL to something not 0x0000
+        sampledRegisters.HL.setReg(0xABCD);
+
+        // Ensure resetting registers worked
+        Assert.assertEquals(sampledRegisters.AF.getHi(), 0xAA);
+
+        // Perform NOP
+        cpu.forceProgramCounterToPosition(0x00, true);
+
+        // perform 0xCB27 (SLA A)
+        cpu.forceProgramCounterToPosition(0x01, true);
+        // Ensure A isn't 0xAA (it shouldn't be that)
+        Assert.assertNotEquals(sampledRegisters.AF.getHi(), 0xAA);
+        // Bitshift should be 0x54
+        Assert.assertEquals(sampledRegisters.AF.getHi(), 0x54);
+
+        // 0xCB20
+        cpu.forceProgramCounterToPosition(0x03, true);
+        // Ensure B isn't 0xBB (it shouldn't be that)
+        Assert.assertNotEquals(sampledRegisters.BC.getHi(), 0xBB);
+        // Bitshift should be 0x76
+        Assert.assertEquals(sampledRegisters.BC.getHi(), 0x76);
+
+        // 0xCB2F
+        // reset reg A back to 0xAA
+        sampledRegisters.AF.setHi(0xAA);
+        // Shift reg A right
+        cpu.forceProgramCounterToPosition(0x09, true);
+        // Ensure its 0x55
+        Assert.assertEquals(sampledRegisters.AF.getHi(), 0x55);
     }
 }
