@@ -303,4 +303,7 @@ public class CPUTests {
         // Ensure its 0x55
         Assert.assertEquals(sampledRegisters.AF.getHi(), 0x55);
     }
+
+
+
 }

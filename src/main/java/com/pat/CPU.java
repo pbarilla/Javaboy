@@ -336,6 +336,11 @@ public class CPU {
     public int fetchDecodeExecute() {
         int opcode = this.memory.generalMemory[programCounter];
 
+
+      if (opcode == 0x00) {
+          System.out.printf("NOP with PC:: 0x%x SP 0x%x\n", programCounter, stackPointer);
+      }
+
         int cycles = 0;
 
         switch (opcode) {
@@ -2573,7 +2578,7 @@ public class CPU {
         }
 
 
-        this.programCounter++;
+        this.programCounter = this.programCounter + 1;
 
         if (cycles == 0) {
             System.out.printf("Opcode 0x%x not implemented\n", opcode);

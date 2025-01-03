@@ -4,6 +4,7 @@ import org.apache.commons.io.IOUtils;
 
 import java.io.*;
 import java.nio.file.Files;
+import java.util.Objects;
 
 public class Memory {
 
@@ -56,7 +57,7 @@ public class Memory {
      * */
     public void loadTestRom() throws IOException {
         ClassLoader classLoader = getClass().getClassLoader();
-        File file = new File(classLoader.getResource("cpu_instrs.gb").getFile());
+        File file = new File(Objects.requireNonNull(classLoader.getResource("cpu_instrs.gb")).getFile());
         InputStream is = Files.newInputStream(file.toPath());
 
         byte[] bytes = IOUtils.toByteArray(is, file.length());
