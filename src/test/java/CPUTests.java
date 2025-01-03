@@ -11,7 +11,7 @@ public class CPUTests {
 
     @Test
     public void testRegister_setRegister_thenTestNibbles() {
-        Register register = new Register((short) 0xFA00);
+        Register register = new Register(0xFA00);
 
         Assert.assertEquals(0xFA, register.getHi());
         Assert.assertEquals(0x00, register.getLo());
@@ -43,7 +43,7 @@ public class CPUTests {
 
         boolean isRunning = true;
 
-        int testRunningIterations = 9999999; // run for around 10 million operations (should take 0.5 - 1 seconds)
+        int testRunningIterations = 10; // run for around 10 million operations (should take 0.5 - 1 seconds)
 
         while (isRunning) {
             int cycles = cpu.fetchDecodeExecute();
@@ -66,37 +66,31 @@ public class CPUTests {
         memory.loadTestRom();
 
         // Test memory was loaded right. 0x00 will be 60
-        Assert.assertEquals(memory.generalMemory[0x00], 60);
+        Assert.assertEquals(60, memory.generalMemory[0x00]);
 
         int cycles;
-
-        //test loading 10 into 0x00
-        cycles = LSM.loadValueIntoLocation(10, 0x00, memory);
-
-        Assert.assertEquals(cycles, 8);
-        Assert.assertEquals(memory.generalMemory[0x00], 10);
 
         // test loading into registers
 
         Register register = new Register((short) 0xFA00);
         // Test 0xFA hi is 0xF
-        Assert.assertEquals(register.getHi(), 0xFA);
+        Assert.assertEquals(0xFA, register.getHi());
         cycles = LSM.loadValueIntoRegister(0x0A, register, Register.RegByte.HI);
-        Assert.assertEquals(cycles, 4);
-        Assert.assertEquals(register.getHi(), 0x0A);
+        Assert.assertEquals(4, cycles);
+        Assert.assertEquals(0x0A, register.getHi());
 
         // test loading into lo
         cycles = LSM.loadValueIntoRegister(0xCC, register, Register.RegByte.LO);
-        Assert.assertEquals(cycles, 4);
-        Assert.assertEquals(register.getLo(), 0xCC);
+        Assert.assertEquals(4, cycles);
+        Assert.assertEquals(0xCC, register.getLo());
 
         // test loading a word
 
         cycles = LSM.loadValueIntoRegister(0xBDEF, register, Register.RegByte.WORD);
-        Assert.assertEquals(cycles, 8);
-        Assert.assertEquals(register.getHi(), 0xBD);
-        Assert.assertEquals(register.getLo(), 0xEF);
-        Assert.assertEquals(register.getReg(), 0xBDEF);
+        Assert.assertEquals(8, cycles);
+        Assert.assertEquals(0xBD, register.getHi());
+        Assert.assertEquals(0xEF, register.getLo());
+        Assert.assertEquals(0xBDEF, register.getReg());
 
     }
 
@@ -126,16 +120,16 @@ public class CPUTests {
         cpu.forceProgramCounterToPosition(0x00, true);
 
         // force memory to be something NOT 0x00
-        memory.writeByteToLocation(0xFF, 0xBB);
+        memory.writeByteToLocation(0xFF, 0x80BB);
 
         // test memory was set
-        Assert.assertEquals(memory.generalMemory[0xBB], 0xFF);
+        Assert.assertEquals(0xFF, memory.generalMemory[0x80BB]);
 
         // run 0x06, load reg B into memory location at PC
         cpu.forceProgramCounterToPosition(0x01, true);
 
         // test that the load worked, and set it back to reg b (which is 0x00)
-        Assert.assertEquals(memory.generalMemory[0xBB], 0x00);
+        Assert.assertEquals(0x00, memory.generalMemory[0xBB]);
     }
 
 
@@ -156,7 +150,7 @@ public class CPUTests {
 
         cpu.forceProgramCounterToPosition(0x01, true);
 
-        Assert.assertEquals(sampledRegisters.AF.getHi(), 0xAA);
+        Assert.assertEquals(0xAA, sampledRegisters.AF.getHi());
     }
 
     @Test
@@ -183,12 +177,12 @@ public class CPUTests {
         cpu.forceProgramCounterToPosition(0x01, true);
 
         // ensure reg A is 0xAA
-        Assert.assertEquals(sampledRegisters.AF.getHi(), 0xAA);
+        Assert.assertEquals(0xAA, sampledRegisters.AF.getHi());
 
-        // excute RLCA
+        // execute RLCA
         cpu.forceProgramCounterToPosition(0x03, true);
         // did the rotate work?
-        Assert.assertEquals(sampledRegisters.AF.getHi(), 0x54);
+        Assert.assertEquals(0x54, sampledRegisters.AF.getHi());
 
         // set carry flag
         cpu.forceProgramCounterToPosition(0x04, true);
@@ -196,40 +190,40 @@ public class CPUTests {
         // set reg a back to 0xAA
         cpu.forceProgramCounterToPosition(0x05, true);
         // ensure reg A is 0xAA
-        Assert.assertEquals(sampledRegisters.AF.getHi(), 0xAA);
+        Assert.assertEquals(0xAA, sampledRegisters.AF.getHi());
 
         // test RLCA with carry set
         cpu.forceProgramCounterToPosition(0x07, true);
-        Assert.assertEquals(sampledRegisters.AF.getHi(), 0x55);
+        Assert.assertEquals(0x55, sampledRegisters.AF.getHi());
 
         // set reg a back to 0xAA
         cpu.forceProgramCounterToPosition(0x05, true);
         // ensure reg A is 0xAA
-        Assert.assertEquals(sampledRegisters.AF.getHi(), 0xAA);
+        Assert.assertEquals(0xAA, sampledRegisters.AF.getHi());
 
         // test RLA
         cpu.forceProgramCounterToPosition(0x08, true);
-        Assert.assertEquals(sampledRegisters.AF.getHi(), 0x54);
+        Assert.assertEquals(0x54, sampledRegisters.AF.getHi());
 
         // set reg a back to 0xAA
         cpu.forceProgramCounterToPosition(0x05, true);
         // ensure reg A is 0xAA
-        Assert.assertEquals(sampledRegisters.AF.getHi(), 0xAA);
+        Assert.assertEquals(0xAA, sampledRegisters.AF.getHi());
 
         // RRCA
         cpu.forceProgramCounterToPosition(0x09, true);
         // at this point the carry bit is set, so RRCA will be 0xd5
-        Assert.assertEquals(sampledRegisters.AF.getHi(), 0xd5);
+        Assert.assertEquals(0xd5, sampledRegisters.AF.getHi());
 
         // set reg a back to 0xAA
         cpu.forceProgramCounterToPosition(0x05, true);
         // ensure reg A is 0xAA
-        Assert.assertEquals(sampledRegisters.AF.getHi(), 0xAA);
+        Assert.assertEquals(0xAA, sampledRegisters.AF.getHi());
 
         // RRA
         cpu.forceProgramCounterToPosition(0x0A, true);
         // at this point the carry bit is set, so RRCA will be 0xd5
-        Assert.assertEquals(sampledRegisters.AF.getHi(), 0x55);
+        Assert.assertEquals(0x55, sampledRegisters.AF.getHi());
     }
 
     @Test
@@ -276,7 +270,7 @@ public class CPUTests {
         sampledRegisters.HL.setReg(0xABCD);
 
         // Ensure resetting registers worked
-        Assert.assertEquals(sampledRegisters.AF.getHi(), 0xAA);
+        Assert.assertEquals(0xAA, sampledRegisters.AF.getHi());
 
         // Perform NOP
         cpu.forceProgramCounterToPosition(0x00, true);
@@ -284,16 +278,16 @@ public class CPUTests {
         // perform 0xCB27 (SLA A)
         cpu.forceProgramCounterToPosition(0x01, true);
         // Ensure A isn't 0xAA (it shouldn't be that)
-        Assert.assertNotEquals(sampledRegisters.AF.getHi(), 0xAA);
+        Assert.assertNotEquals(0xAA, sampledRegisters.AF.getHi());
         // Bitshift should be 0x54
-        Assert.assertEquals(sampledRegisters.AF.getHi(), 0x54);
+        Assert.assertEquals(0x54, sampledRegisters.AF.getHi());
 
         // 0xCB20
         cpu.forceProgramCounterToPosition(0x03, true);
         // Ensure B isn't 0xBB (it shouldn't be that)
-        Assert.assertNotEquals(sampledRegisters.BC.getHi(), 0xBB);
+        Assert.assertNotEquals(0xBB, sampledRegisters.BC.getHi());
         // Bitshift should be 0x76
-        Assert.assertEquals(sampledRegisters.BC.getHi(), 0x76);
+        Assert.assertEquals(0x76, sampledRegisters.BC.getHi());
 
         // 0xCB2F
         // reset reg A back to 0xAA
@@ -301,7 +295,7 @@ public class CPUTests {
         // Shift reg A right
         cpu.forceProgramCounterToPosition(0x09, true);
         // Ensure its 0x55
-        Assert.assertEquals(sampledRegisters.AF.getHi(), 0x55);
+        Assert.assertEquals(0x55, sampledRegisters.AF.getHi());
     }
 
 

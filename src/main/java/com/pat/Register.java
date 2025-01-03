@@ -10,7 +10,7 @@ public class Register {
     }
     public int reg;
 
-    public Register(short reg) {
+    public Register(int reg) {
         setReg(reg);
     }
 
@@ -35,7 +35,7 @@ public class Register {
     }
 
     public enum RegByte {
-        HI, LO, WORD;
+        HI, LO, WORD
     }
 
     public static class RegisterHash {

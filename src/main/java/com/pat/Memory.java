@@ -8,14 +8,34 @@ import java.util.Objects;
 
 public class Memory {
 
-    private static final int maxMemorySize = 0xFFFF + 1;
+    private static final int maxMemorySize = 0x10000;
     // just storing the whole cartridge here
     public int[] cartMemory;
     // the whole memory map.
     public int[] generalMemory = new int[maxMemorySize];
 
+    int currentRomBank = 1;
+    int[] ramBanks = new int[0x8000];
+    int currentRamBank = 0;
+
+    public enum MemoryBankType {
+        MBC1, MBC2, UNKNOWN
+    }
 
     public Memory() {
+        reset();
+    }
+
+    public MemoryBankType getMemoryBankType() {
+        int bankByte = this.cartMemory[0x147];
+        return switch (bankByte) {
+            case 1, 2, 3 -> MemoryBankType.MBC1;
+            case 5, 6 -> MemoryBankType.MBC2;
+            default -> MemoryBankType.UNKNOWN;
+        };
+    }
+
+    public void reset() {
         generalMemory[0xFF05] = 0x00;
         generalMemory[0xFF06] = 0x00;
         generalMemory[0xFF07] = 0x00;
@@ -51,23 +71,20 @@ public class Memory {
 
 
     /**
-     *
      * Use this to load the cpu_instrs rom directly. Blaarg rom.
-     *
-     * */
+     */
     public void loadTestRom() throws IOException {
         ClassLoader classLoader = getClass().getClassLoader();
         File file = new File(Objects.requireNonNull(classLoader.getResource("cpu_instrs.gb")).getFile());
         InputStream is = Files.newInputStream(file.toPath());
 
         byte[] bytes = IOUtils.toByteArray(is, file.length());
-        int[] intArray = new int[bytes.length];
+        int[] intArray = new int[0x200000];
         for (int i = 0; i < bytes.length; i++) {
             intArray[i] = bytes[i] & 0xFF;
         }
 
         // get some of the stats from the rom itself
-
 
 
         this.cartMemory = intArray;
@@ -77,16 +94,16 @@ public class Memory {
         // 0x4000 -> 0x8000 is ROM bank #n, for multibank etc.
         // Test rom, tetris, is 32kB so no bank switching required
         for (int i = 0; i < this.cartMemory.length && i < 0x8000; i++) {
-            writeByteToLocation(this.cartMemory[i], i);
+            this.generalMemory[i] = this.cartMemory[i];
         }
+
+
 
     }
 
     /**
-     *
      * Use this mostly to test little sample roms. Not safe enough for an actual ROM
-     *
-     * */
+     */
     public void loadTestRomByteArray(int[] romMemory) throws IOException {
         int[] intArray = new int[romMemory.length];
         for (int i = 0; i < romMemory.length; i++) {
@@ -100,21 +117,26 @@ public class Memory {
         // 0x4000 -> 0x8000 is ROM bank #n, for multibank etc.
         // Test rom, tetris, is 32kB so no bank switching required
         for (int i = 0; i < this.cartMemory.length && i < 0x8000; i++) {
-            writeByteToLocation(this.cartMemory[i], i);
+            this.generalMemory[i] = this.cartMemory[i];
         }
     }
 
-
-
     // expand this to also echo if needed, etc
     public void writeByteToLocation(int a, int location) {
-        if (location >= maxMemorySize) {
-            // TODO: fix this later. Right now if it tries to access memory outside of memory space, return 0x00
-            System.out.printf("Attempted writing out of bounds %x\n", location);
+        if (location >= 0xE000 && location < 0xFE00) {
+            this.generalMemory[location] = a;
+            this.generalMemory[location - 0x2000] = a; // ECHO of E000 -> C000
+        } else if (location >= 0xC000 && location < 0xE000){
+            this.generalMemory[location] = a;
+            this.generalMemory[location + 0x2000] = a; // ECHO of C000 -> E000
+        } else if (location >= 0xFEA0 && location < 0xFEFF) {
+            // protected area, dont do anything
+            System.out.printf("Protected memory write attempted at :: 0x%x\n", location);
             return;
+        } else {
+            // just return the memory
+            this.generalMemory[location] = a;
         }
-
-        this.generalMemory[location] = a;
     }
 
     public void writeWordToLocation(int word, int location) {
@@ -122,12 +144,19 @@ public class Memory {
         writeByteToLocation(word >> 8, location + 1); // >> 8 gets the low 8 bit
     }
 
+
     public int readByteFromLocation(int location) {
-        if (location >= maxMemorySize || location < 0) {
-            // TODO: fix this later. Right now if it tries to access memory outside of memory space, return 0x00
-            System.out.printf("Attempted reading out of bounds %x\n", location);
-            return 0x00;
+        // Reading from rom memory bank
+        if ((location >= 0x4000) && (location <= 0x7FFF)) {
+            int newAddress = location - 0x4000;
+            return cartMemory[newAddress + (currentRomBank * 0x4000)];
+
+            // ram memory bank
+        } else if ((location >= 0xA000) && (location <= 0xBFFF)) {
+            int newAddress = location - 0xA000;
+            return ramBanks[newAddress + (currentRamBank * 0x2000)];
         }
+
         return this.generalMemory[location];
     }
 

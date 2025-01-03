@@ -7,20 +7,33 @@ public class CPU {
 
     private final Memory memory; // memory includes cart and onboard memory
 
-    private static Register registerAF = new Register((short) 0x0000);
-    private static Register registerBC = new Register((short) 0x0000);
-    private static Register registerDE = new Register((short) 0x0000);
-    private static Register registerHL = new Register((short) 0x0000);
+    private static Register registerAF = new Register(0x01B0);
+    private static Register registerBC = new Register(0x0013);
+    private static Register registerDE = new Register(0x00D8);
+    private static Register registerHL = new Register(0x014D);
     private final Flags flags = new FlagsImpl();
 
     private static boolean interruptsEnabled = false;
 
 
     private int programCounter = 0x100; // 0x100 is the default starting position of the PC
-    private int stackPointer = 0xEEEE;
+    private int stackPointer = 0xFFFE;
 
     public CPU(Memory memory) {
+        // Set
         this.memory = memory;
+        this.memory.reset();
+        reset();
+    }
+
+    public void reset() {
+        programCounter = 0x100;
+        stackPointer = 0xFFFE;
+        registerAF.setReg(0x01B0);
+        registerBC.setReg(0x0013);
+        registerDE.setReg(0x00D8);
+        registerHL.setReg(0x004D);
+        interruptsEnabled = false;
     }
 
     /**
@@ -337,9 +350,11 @@ public class CPU {
         int opcode = this.memory.generalMemory[programCounter];
 
 
-      if (opcode == 0x00) {
-          System.out.printf("NOP with PC:: 0x%x SP 0x%x\n", programCounter, stackPointer);
-      }
+        if (opcode == 0x00) {
+            System.out.printf("NOP with PC:: 0x%x SP 0x%x\n", programCounter, stackPointer);
+        } else {
+            System.out.printf("OPCODE :: 0x%x\n", opcode);
+        }
 
         int cycles = 0;
 
@@ -349,21 +364,27 @@ public class CPU {
             // LD nn,n (page 65)
             case 0x06:
                 cycles = LSM.loadValueIntoLocation(registerBC.getHi(), memory.generalMemory[programCounter + 1], memory);
+                programCounter = programCounter + 1;
                 break;
             case 0x0E:
                 cycles = LSM.loadValueIntoLocation(registerBC.getLo(), memory.generalMemory[programCounter + 1], memory);
+                programCounter = programCounter + 1;
                 break;
             case 0x16:
                 cycles = LSM.loadValueIntoLocation(registerDE.getHi(), memory.generalMemory[programCounter + 1], memory);
+                programCounter = programCounter + 1;
                 break;
             case 0x1E:
                 cycles = LSM.loadValueIntoLocation(registerDE.getLo(), memory.generalMemory[programCounter + 1], memory);
+                programCounter = programCounter + 1;
                 break;
             case 0x26:
                 cycles = LSM.loadValueIntoLocation(registerHL.getHi(), memory.generalMemory[programCounter + 1], memory);
+                programCounter = programCounter + 1;
                 break;
             case 0x2E:
                 cycles = LSM.loadValueIntoLocation(registerHL.getLo(), memory.generalMemory[programCounter + 1], memory);
+                programCounter = programCounter + 1;
                 break;
 
             // LD r1, r2 (page 66)
@@ -537,6 +558,7 @@ public class CPU {
                 break;
             case 0x36:
                 cycles = LSM.loadImmediateIntoRegister(programCounter + 1, LSM.ImmediateLength.BYTE, memory, registerHL, Register.RegByte.WORD);
+                programCounter = programCounter + 1;
                 break;
 
             // LD A,n (page 68)
@@ -548,9 +570,11 @@ public class CPU {
                 break;
             case 0xFA:
                 cycles = LSM.loadImmediateIntoRegister(programCounter + 1, LSM.ImmediateLength.WORD, memory, registerAF, Register.RegByte.HI);
+                programCounter = programCounter + 1;
                 break;
             case 0x3E:
                 cycles = LSM.loadImmediateIntoRegister(programCounter + 1, LSM.ImmediateLength.BYTE, memory, registerAF, Register.RegByte.HI);
+                programCounter = programCounter + 1;
                 break;
             case 0x57:
                 cycles = LSM.loadValueIntoRegister(registerDE.getHi(), registerAF, Register.RegByte.HI);
@@ -575,6 +599,7 @@ public class CPU {
                 break;
             case 0xEA:
                 cycles = LSM.loadImmediateIntoRegister(programCounter + 1, LSM.ImmediateLength.BYTE, memory, registerAF, Register.RegByte.WORD);
+                programCounter = programCounter + 1;
                 break;
 
             case 0xF2: {
@@ -665,6 +690,7 @@ public class CPU {
                 // page 75
                 int immediate = 0xFF00 + memory.readByteFromLocation(programCounter + 1);
                 LSM.loadValueIntoRegister(immediate, registerAF, Register.RegByte.HI);
+                programCounter = programCounter + 1;
                 cycles = 12;
                 break;
             }
@@ -674,14 +700,17 @@ public class CPU {
             // page 76
             case 0x01:
                 LSM.loadValueIntoRegister(memory.readWordFromLocation(programCounter + 1), registerBC, Register.RegByte.WORD);
+                programCounter = programCounter + 1;
                 cycles = 12;
                 break;
             case 0x11:
                 LSM.loadValueIntoRegister(memory.readWordFromLocation(programCounter + 1), registerDE, Register.RegByte.WORD);
+                programCounter = programCounter + 1;
                 cycles = 12;
                 break;
             case 0x21:
                 LSM.loadValueIntoRegister(memory.readWordFromLocation(programCounter + 1), registerHL, Register.RegByte.WORD);
+                programCounter = programCounter + 1;
                 cycles = 12;
                 break;
             case 0x31: {
@@ -704,7 +733,7 @@ public class CPU {
                 // page 77
 
 
-                int n = memory.readByteFromLocation(programCounter);
+                int n = memory.readByteFromLocation(programCounter + 1);
                 int value = (stackPointer + n) & 0xFFFF;
 
                 boolean carry = ((stackPointer ^ n ^ value) & 0x100) != 0;
@@ -719,6 +748,8 @@ public class CPU {
 
                 cycles = 12;
 
+                programCounter = programCounter + 1;
+
                 break;
             }
 
@@ -728,6 +759,7 @@ public class CPU {
                 int immediate = memory.readWordFromLocation(programCounter + 1);
                 LSM.loadValueIntoLocation(stackPointer, immediate, memory);
                 cycles = 20;
+                programCounter = programCounter + 1;
                 break;
             }
 
@@ -815,6 +847,7 @@ public class CPU {
             case 0xC6: {
                 addIntoA(memory.readByteFromLocation(programCounter + 1));
                 cycles = 8;
+                programCounter = programCounter + 1;
                 break;
             }
 
@@ -863,6 +896,7 @@ public class CPU {
             case 0xCE: {
                 addWithCarryIntoA(memory.readByteFromLocation(programCounter + 1));
                 cycles = 8;
+                programCounter = programCounter + 1;
                 break;
             }
 
@@ -903,6 +937,7 @@ public class CPU {
             case 0xD6:
                 subtractFromA(memory.readByteFromLocation(programCounter + 1));
                 cycles = 8;
+                programCounter = programCounter + 1;
                 break;
 
 
@@ -996,6 +1031,7 @@ public class CPU {
             case 0xE6: {
                 andIntoA(memory.readByteFromLocation(programCounter + 1));
                 cycles = 8;
+                programCounter = programCounter + 1;
                 break;
             }
 
@@ -1044,6 +1080,7 @@ public class CPU {
             case 0xF6: {
                 orIntoA(memory.readByteFromLocation(programCounter + 1));
                 cycles = 8;
+                programCounter = programCounter + 1;
                 break;
             }
 
@@ -1084,6 +1121,7 @@ public class CPU {
             case 0xEE: {
                 xorIntoA(memory.readByteFromLocation(programCounter + 1));
                 cycles = 8;
+                programCounter = programCounter + 1;
                 break;
             }
 
@@ -1124,6 +1162,7 @@ public class CPU {
             case 0xFE: {
                 cpToA(memory.readByteFromLocation(programCounter + 1));
                 cycles = 8;
+                programCounter = programCounter + 1;
                 break;
             }
 
@@ -1238,6 +1277,8 @@ public class CPU {
                 flags.set(Flags.Flag.CARRY, carry);
 
                 cycles = 16;
+
+                programCounter = programCounter + 1;
 
                 break;
             }
@@ -1405,10 +1446,9 @@ public class CPU {
             // page 111
             case 0xC3: {
 
-                forceProgramCounterToPosition(this.memory.readWordFromLocation(programCounter + 1), true);
+                forceProgramCounterToPosition(this.memory.readWordFromLocation(programCounter + 1), false);
                 // cycles might not be reflected here...
-                cycles = 12;
-                break;
+                return 12;
             }
 
             // JP cc,nn
@@ -1416,21 +1456,25 @@ public class CPU {
             case 0xC2: {
                 // if Z flag is reset
                 if (!flags.isSet(Flags.Flag.ZERO)) {
-                    forceProgramCounterToPosition(this.memory.readWordFromLocation(programCounter + 1), true);
+                    forceProgramCounterToPosition(this.memory.readWordFromLocation(programCounter + 1), false);
+                    return 12;
                 }
                 cycles = 12;
                 break;
+
             }
             case 0xCA: {
                 if (flags.isSet(Flags.Flag.ZERO)) {
-                    forceProgramCounterToPosition(this.memory.readWordFromLocation(programCounter + 1), true);
+                    forceProgramCounterToPosition(this.memory.readWordFromLocation(programCounter + 1), false);
+                    return 12;
                 }
                 cycles = 12;
                 break;
             }
             case 0xD2: {
                 if (!flags.isSet(Flags.Flag.CARRY)) {
-                    forceProgramCounterToPosition(this.memory.readWordFromLocation(programCounter + 1), true);
+                    forceProgramCounterToPosition(this.memory.readWordFromLocation(programCounter + 1), false);
+                    return 12;
                 }
                 cycles = 12;
                 break;
@@ -1438,7 +1482,8 @@ public class CPU {
             case 0xDA: {
 
                 if (flags.isSet(Flags.Flag.CARRY)) {
-                    forceProgramCounterToPosition(this.memory.readWordFromLocation(programCounter + 1), true);
+                    forceProgramCounterToPosition(this.memory.readWordFromLocation(programCounter + 1), false);
+                    return 12;
                 }
                 cycles = 12;
                 break;
@@ -1447,9 +1492,8 @@ public class CPU {
             case 0xE9: {
                 // JP (HL)
                 // page 112
-                forceProgramCounterToPosition(registerHL.getReg(), true);
-                cycles = 4;
-                break;
+                forceProgramCounterToPosition(registerHL.getReg(), false);
+                return 4;
             }
 
             case 0x18: {
@@ -1457,9 +1501,8 @@ public class CPU {
                 // page 112
                 int immediateByte = this.memory.readByteFromLocation(programCounter + 1);
                 programCounter = programCounter + immediateByte;
-                forceProgramCounterToPosition(programCounter, true);
-                cycles = 8;
-                break;
+                forceProgramCounterToPosition(programCounter, false);
+                return 8;
             }
 
 
@@ -1468,21 +1511,24 @@ public class CPU {
 
             case 0x20: {
                 if (!flags.isSet(Flags.Flag.ZERO)) {
-                    forceProgramCounterToPosition(this.memory.readByteFromLocation(programCounter + 1), true);
+                    forceProgramCounterToPosition(this.memory.readByteFromLocation(programCounter + 1), false);
+                    return 8;
                 }
                 cycles = 8;
                 break;
             }
             case 0x28: {
                 if (flags.isSet(Flags.Flag.ZERO)) {
-                    forceProgramCounterToPosition(this.memory.readByteFromLocation(programCounter + 1), true);
+                    forceProgramCounterToPosition(this.memory.readByteFromLocation(programCounter + 1), false);
+                    return 8;
                 }
                 cycles = 8;
                 break;
             }
             case 0x30: {
                 if (!flags.isSet(Flags.Flag.CARRY)) {
-                    forceProgramCounterToPosition(this.memory.readByteFromLocation(programCounter + 1), true);
+                    forceProgramCounterToPosition(this.memory.readByteFromLocation(programCounter + 1), false);
+                    return 8;
                 }
                 cycles = 8;
                 break;
@@ -1490,7 +1536,8 @@ public class CPU {
             case 0x38: {
 
                 if (flags.isSet(Flags.Flag.CARRY)) {
-                    forceProgramCounterToPosition(this.memory.readByteFromLocation(programCounter + 1), true);
+                    forceProgramCounterToPosition(this.memory.readByteFromLocation(programCounter + 1), false);
+                    return 8;
                 }
                 cycles = 8;
                 break;
@@ -1503,9 +1550,8 @@ public class CPU {
 
                 int secondByte = this.memory.readByteFromLocation(programCounter + 1);
                 stackPointer = programCounter;
-                forceProgramCounterToPosition(secondByte, true);
-                cycles = 12;
-                break;
+                forceProgramCounterToPosition(secondByte, false);
+                return 12;
             }
 
             // CALL cc,nn
@@ -1515,9 +1561,8 @@ public class CPU {
                 if (!flags.isSet(Flags.Flag.ZERO)) {
                     int secondByte = this.memory.readByteFromLocation(programCounter + 1);
                     stackPointer = programCounter;
-                    forceProgramCounterToPosition(secondByte, true);
-                    cycles = 12;
-                    break;
+                    forceProgramCounterToPosition(secondByte, false);
+                    return 12;
                 }
                 cycles = 8;
                 break;
@@ -1526,9 +1571,8 @@ public class CPU {
                 if (flags.isSet(Flags.Flag.ZERO)) {
                     int secondByte = this.memory.readByteFromLocation(programCounter + 1);
                     stackPointer = programCounter;
-                    forceProgramCounterToPosition(secondByte, true);
-                    cycles = 12;
-                    break;
+                    forceProgramCounterToPosition(secondByte, false);
+                    return 12;
                 }
                 cycles = 8;
                 break;
@@ -1537,9 +1581,8 @@ public class CPU {
                 if (!flags.isSet(Flags.Flag.CARRY)) {
                     int secondByte = this.memory.readByteFromLocation(programCounter + 1);
                     stackPointer = programCounter;
-                    forceProgramCounterToPosition(secondByte, true);
-                    cycles = 12;
-                    break;
+                    forceProgramCounterToPosition(secondByte, false);
+                    return 12;
                 }
                 cycles = 8;
                 break;
@@ -1548,9 +1591,8 @@ public class CPU {
                 if (flags.isSet(Flags.Flag.CARRY)) {
                     int secondByte = this.memory.readByteFromLocation(programCounter + 1);
                     stackPointer = programCounter;
-                    forceProgramCounterToPosition(secondByte, true);
-                    cycles = 12;
-                    break;
+                    forceProgramCounterToPosition(secondByte, false);
+                    return 12;
                 }
                 cycles = 8;
                 break;
@@ -1562,53 +1604,43 @@ public class CPU {
             // page 116
             case 0xC7: {
                 stackPointer = programCounter;
-                forceProgramCounterToPosition(0x00, true);
-                cycles = 32;
-                break;
+                forceProgramCounterToPosition(0x00, false);
+                return 32;
             }
             case 0xCF: {
                 stackPointer = programCounter;
-                forceProgramCounterToPosition(0x08, true);
-                cycles = 32;
-                break;
+                forceProgramCounterToPosition(0x08, false);
+                return 32;
             }
             case 0xD7: {
                 stackPointer = programCounter;
-                forceProgramCounterToPosition(0x10, true);
-                cycles = 32;
-                break;
+                forceProgramCounterToPosition(0x10, false);
+                return 32;
             }
             case 0xDF: {
                 stackPointer = programCounter;
-                forceProgramCounterToPosition(0x18, true);
-                cycles = 32;
-                break;
+                forceProgramCounterToPosition(0x18, false);
+                return 32;
             }
             case 0xE7: {
                 stackPointer = programCounter;
-                forceProgramCounterToPosition(0x20, true);
-                cycles = 32;
-                break;
+                forceProgramCounterToPosition(0x20, false);
+                return 32;
             }
             case 0xEF: {
                 stackPointer = programCounter;
-                forceProgramCounterToPosition(0x28, true);
-                cycles = 32;
-                break;
+                forceProgramCounterToPosition(0x28, false);
+                return 32;
             }
             case 0xF7: {
                 stackPointer = programCounter;
-                forceProgramCounterToPosition(0x30, true);
-                cycles = 32;
-                break;
+                forceProgramCounterToPosition(0x30, false);
+                return 32;
             }
             case 0xFF: {
                 stackPointer = programCounter;
-                forceProgramCounterToPosition(0x38, true);
-                cycles = 32;
-                break;
-
-
+                forceProgramCounterToPosition(0x38, false);
+                return 32;
             }
 
             // Returns
@@ -1617,11 +1649,11 @@ public class CPU {
             case 0xC9: {
 
                 int address = stackPointer;
-                int value = (memory.readByteFromLocation(address + 1) << 8) | memory.readByteFromLocation(address);
+//                int value = (memory.readByteFromLocation(address + 1) << 8) | memory.readByteFromLocation(address);
+                int value = stackPointer;
                 stackPointer = stackPointer + 2;
-                forceProgramCounterToPosition(value, true);
-                cycles = 8;
-                break;
+                forceProgramCounterToPosition(value, false);
+                return 8;
             }
 
 
@@ -1632,7 +1664,8 @@ public class CPU {
                     int address = stackPointer;
                     int value = (memory.readByteFromLocation(address + 1) << 8) | memory.readByteFromLocation(address);
                     stackPointer = stackPointer + 2;
-                    forceProgramCounterToPosition(value, true);
+                    forceProgramCounterToPosition(value, false);
+                    return 8;
                 }
                 cycles = 8;
                 break;
@@ -1642,7 +1675,8 @@ public class CPU {
                     int address = stackPointer;
                     int value = (memory.readByteFromLocation(address + 1) << 8) | memory.readByteFromLocation(address);
                     stackPointer = stackPointer + 2;
-                    forceProgramCounterToPosition(value, true);
+                    forceProgramCounterToPosition(value, false);
+                    return 8;
                 }
                 cycles = 8;
                 break;
@@ -1652,7 +1686,8 @@ public class CPU {
                     int address = stackPointer;
                     int value = (memory.readByteFromLocation(address + 1) << 8) | memory.readByteFromLocation(address);
                     stackPointer = stackPointer + 2;
-                    forceProgramCounterToPosition(value, true);
+                    forceProgramCounterToPosition(value, false);
+                    return 8;
                 }
                 cycles = 8;
                 break;
@@ -1662,7 +1697,8 @@ public class CPU {
                     int address = stackPointer;
                     int value = (memory.readByteFromLocation(address + 1) << 8) | memory.readByteFromLocation(address);
                     stackPointer = stackPointer + 2;
-                    forceProgramCounterToPosition(value, true);
+                    forceProgramCounterToPosition(value, false);
+                    return 8;
                 }
                 cycles = 8;
 
@@ -1675,10 +1711,10 @@ public class CPU {
                 int address = stackPointer;
                 int value = (memory.readByteFromLocation(address + 1) << 8) | memory.readByteFromLocation(address);
                 stackPointer = stackPointer + 2;
-                forceProgramCounterToPosition(value, true);
-                cycles = 8;
+                forceProgramCounterToPosition(value, false);
+
                 interruptsEnabled = true;
-                break;
+                return 8;
             }
 
 
@@ -2572,17 +2608,13 @@ public class CPU {
 
 
             default: {
+                System.out.printf(" :: opcode missing 0x%x", opcode);
                 break;
             }
 
         }
 
-
         this.programCounter = this.programCounter + 1;
-
-        if (cycles == 0) {
-            System.out.printf("Opcode 0x%x not implemented\n", opcode);
-        }
 
         return cycles;
     }
