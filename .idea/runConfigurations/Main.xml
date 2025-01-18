@@ -3,6 +3,11 @@
     <option name="MAIN_CLASS_NAME" value="com.pat.Main" />
     <module name="javaboy" />
     <option name="VM_PARAMETERS" value="-XstartOnFirstThread" />
+    <extension name="software.aws.toolkits.jetbrains.core.execution.JavaAwsConnectionExtension">
+      <option name="credential" />
+      <option name="region" />
+      <option name="useCurrentConnection" value="false" />
+    </extension>
     <method v="2">
       <option name="Make" enabled="true" />
     </method>

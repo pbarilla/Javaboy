@@ -1,18 +1,18 @@
 package com.pat;
 
+import com.pat.forms.Screen;
 import org.lwjgl.glfw.GLFWErrorCallback;
 import org.lwjgl.glfw.GLFWVidMode;
 import org.lwjgl.opengl.GL;
 import org.lwjgl.system.MemoryStack;
 
+import javax.swing.*;
 import java.io.IOException;
 import java.nio.IntBuffer;
 import java.util.Date;
-import java.util.Random;
 
 import static org.lwjgl.glfw.Callbacks.glfwFreeCallbacks;
 import static org.lwjgl.glfw.GLFW.*;
-import static org.lwjgl.glfw.GLFW.glfwPollEvents;
 import static org.lwjgl.opengl.GL11.*;
 import static org.lwjgl.system.MemoryStack.stackPush;
 import static org.lwjgl.system.MemoryUtil.NULL;
@@ -29,14 +29,24 @@ public class Gameboy {
     private double SKIP_TICKS = 1000 / VERT_SYNC;
     private long nextGameTick;
     private int[][] screenBuffer = new int[256][256];
-    public int[][] screenData = new int [160][144];
+    public int[][] screenData = new int[160][144];
     private int scrollX, scrollY;
     private int wndPosX, wndPosY;
+    private final Screen screen = new Screen();
 
     public Gameboy() throws IOException {
         // do something to setup things...
         System.out.println("Loading test rom");
         memory.loadTestRom();
+    }
+
+    public void startScreen() {
+        SwingUtilities.invokeLater(new Runnable() {
+            @Override
+            public void run() {
+                screen.setVisible(true);
+            }
+        });
     }
 
     private long tickCount() {
@@ -65,7 +75,7 @@ public class Gameboy {
         GLFWErrorCallback.createPrint(System.err).set();
 
         // Initialize GLFW. Most GLFW functions will not work before doing this.
-        if ( !glfwInit() )
+        if (!glfwInit())
             throw new IllegalStateException("Unable to initialize GLFW");
 
         // Configure GLFW
@@ -75,17 +85,17 @@ public class Gameboy {
 
         // Create the window
         window = glfwCreateWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Javaboi", NULL, NULL);
-        if ( window == NULL )
+        if (window == NULL)
             throw new RuntimeException("Failed to create the GLFW window");
 
         // Set up a key callback. It will be called every time a key is pressed, repeated or released.
         glfwSetKeyCallback(window, (window, key, scancode, action, mods) -> {
-            if ( key == GLFW_KEY_ESCAPE && action == GLFW_RELEASE )
+            if (key == GLFW_KEY_ESCAPE && action == GLFW_RELEASE)
                 glfwSetWindowShouldClose(window, true); // We will detect this in the rendering loop
         });
 
         // Get the thread stack and push a new frame
-        try ( MemoryStack stack = stackPush() ) {
+        try (MemoryStack stack = stackPush()) {
             IntBuffer pWidth = stack.mallocInt(1); // int*
             IntBuffer pHeight = stack.mallocInt(1); // int*
 
@@ -122,11 +132,21 @@ public class Gameboy {
 
     void setDrawColor(GBColor color) {
         switch (color) {
-            case MAX: glColor3f(8.0f /255.0f,24.0f / 255.0f,32.0f / 255.0f); break;
-            case BRIGHT:glColor3f(52.0f / 255.0f,104.0f / 255.0f,86.0f / 255.0f); break;
-            case DULL:glColor3f(136.0f / 255.0f,192.0f / 255.0f,112.0f / 255.0f); break;
-            case OFF:glColor3f(224.0f / 255.0f,248.0f / 255.0f,208.0f / 255.0f); break;
-            default: glColor3f(255.0f,255.0f,255.0f); break;
+            case MAX:
+                glColor3f(8.0f / 255.0f, 24.0f / 255.0f, 32.0f / 255.0f);
+                break;
+            case BRIGHT:
+                glColor3f(52.0f / 255.0f, 104.0f / 255.0f, 86.0f / 255.0f);
+                break;
+            case DULL:
+                glColor3f(136.0f / 255.0f, 192.0f / 255.0f, 112.0f / 255.0f);
+                break;
+            case OFF:
+                glColor3f(224.0f / 255.0f, 248.0f / 255.0f, 208.0f / 255.0f);
+                break;
+            default:
+                glColor3f(255.0f, 255.0f, 255.0f);
+                break;
         }
     }
 
@@ -148,13 +168,12 @@ public class Gameboy {
 
         // Run the rendering loop until the user has attempted to close
         // the window or has pressed the ESCAPE key.
-        while ( !glfwWindowShouldClose(window) ) {
+        while (!glfwWindowShouldClose(window)) {
 
             int cycles = this.cpu.fetchDecodeExecute();
 
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); // clear the framebuffer
             glLoadIdentity();
-
 
 
             // render line at a time
@@ -205,8 +224,6 @@ public class Gameboy {
                             glEnd();//end drawing of points
                         }
                     }
-
-
 
 
                 }

@@ -13,8 +13,8 @@ public class Main {
         }
     }
 
-    public static void main(String[] args) throws InterruptedException {
-//        gameboy.video.run();
-        gameboy.run();
+    public static void main(String[] args) {
+        gameboy.startScreen();
+//        gameboy.run();
     }
 }
