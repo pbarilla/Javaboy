@@ -26,6 +26,18 @@ public class CPU {
         reset();
     }
 
+    public int getSP() {
+        return stackPointer;
+    }
+
+    public int getPC() {
+        return programCounter;
+    }
+
+    public Flags getFlags() {
+        return flags;
+    }
+
     public void reset() {
         programCounter = 0x100;
         stackPointer = 0xFFFE;
